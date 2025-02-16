@@ -2,10 +2,13 @@ import sys
 import requests
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QFileDialog, QMessageBox, QStackedWidget,
-    QDesktopWidget, QSizePolicy, QTableWidget, QTableWidgetItem, QComboBox, QDateEdit
+    QDesktopWidget, QSizePolicy, QTableWidget, QTableWidgetItem, QComboBox, QDateEdit, QFrame, QScrollArea,
+    QScrollArea, QHBoxLayout, QGridLayout
 )
-from PyQt5.QtCore import QDate
-from PyQt5.QtGui import QIcon
+
+
+from PyQt5.QtCore import QDate, Qt
+from PyQt5.QtGui import QIcon, QFont
 import requests
 
 API_LOGIN = "http://127.0.0.1:5000/login"
@@ -20,32 +23,30 @@ class MainApp(QWidget):
     def __init__(self):
         super().__init__()
         # Set Window Icon
-        self.setWindowIcon(QIcon("static/favicon.ico"))  # Use PNG or ICO file
-
+        self.setWindowIcon(QIcon("static/favicon.ico"))
         self.setWindowTitle("Creo.log")
-        self.resize(1000, 600)  # ✅ Step 2: Set larger size
-        self.center_window()    # ✅ Step 1: Center the window
+        self.resize(800, 600)
+        self.center_window()
+        
+        # Set window background to white
+        self.setStyleSheet("background-color: white;")
 
-
-        # Create Stacked Layout (to switch between Login and Upload UI)
+        # Create Stacked Layout
         self.stack = QStackedWidget(self)
-
-        # Create Login and Upload Screens
+        
+        # Create all screens
         self.login_screen = self.create_login_screen()
-        self.menu_screen = self.create_menu_screen() 
+        self.menu_screen = self.create_menu_screen()
         self.upload_screen = self.create_upload_screen()
         self.add_student_screen = self.create_add_student_screen()
         self.attendance_history_screen = self.create_attendance_history_screen()
 
         # Add Screens to Stack
-        self.stack.addWidget(self.login_screen)  # Index 0
-        self.stack.addWidget(self.menu_screen)   # Index 1
-        self.stack.addWidget(self.upload_screen) # Index 2
-        self.stack.addWidget(self.add_student_screen) # Index 3
-        self.stack.addWidget(self.attendance_history_screen)  # Index 4
-
-
-        
+        self.stack.addWidget(self.login_screen)
+        self.stack.addWidget(self.menu_screen)
+        self.stack.addWidget(self.upload_screen)
+        self.stack.addWidget(self.add_student_screen)
+        self.stack.addWidget(self.attendance_history_screen)
 
         # Set Layout
         layout = QVBoxLayout(self)
@@ -61,165 +62,770 @@ class MainApp(QWidget):
 
 
     def create_login_screen(self):
-        """Creates the Login UI"""
+        """Creates the Login UI with updated design"""
         login_widget = QWidget()
         layout = QVBoxLayout()
-
-        self.label_login = QLabel("Enter your credentials:")
+        layout.setAlignment(Qt.AlignCenter)
+        
+        # Create a container for the logo
+        logo_container = QWidget()
+        logo_layout = QVBoxLayout()
+        
+        # Create and style the CREOTEC text
+        company_name = QLabel("CREOTEC")
+        company_name.setStyleSheet("""
+            QLabel {
+                color: #000080;
+                font-size: 36px;
+                font-weight: bold;
+                letter-spacing: 2px;
+            }
+        """)
+        company_name.setAlignment(Qt.AlignCenter)
+        
+        # Create and style the subtitle
+        subtitle = QLabel("PHILIPPINES, INC.")
+        subtitle.setStyleSheet("""
+            QLabel {
+                color: #000080;
+                font-size: 12px;
+                letter-spacing: 1px;
+                margin-top: -10px;
+            }
+        """)
+        subtitle.setAlignment(Qt.AlignCenter)
+        
+        # Add logo elements to logo container
+        logo_layout.addWidget(company_name)
+        logo_layout.addWidget(subtitle)
+        logo_container.setLayout(logo_layout)
+        
+        # Create login form container
+        form_container = QFrame()
+        form_container.setStyleSheet("""
+            QFrame {
+                background-color: #f3f4f6;
+                border-radius: 8px;
+                padding: 20px;
+                min-width: 300px;
+                max-width: 400px;
+            }
+        """)
+        form_layout = QVBoxLayout()
+        
+        # Style the input fields
         self.username_input = QLineEdit()
         self.username_input.setPlaceholderText("Username")
+        self.username_input.setStyleSheet("""
+            QLineEdit {
+                padding: 12px;
+                border: 1px solid #e5e7eb;
+                border-radius: 4px;
+                background-color: white;
+                margin-bottom: 10px;
+            }
+            QLineEdit:focus {
+                border: 2px solid #4f46e5;
+            }
+        """)
+        
         self.password_input = QLineEdit()
         self.password_input.setPlaceholderText("Password")
         self.password_input.setEchoMode(QLineEdit.Password)
+        self.password_input.setStyleSheet("""
+            QLineEdit {
+                padding: 12px;
+                border: 1px solid #e5e7eb;
+                border-radius: 4px;
+                background-color: white;
+                margin-bottom: 10px;
+            }
+            QLineEdit:focus {
+                border: 2px solid #4f46e5;
+            }
+        """)
+        
+        # Style the login button
         self.login_button = QPushButton("Login")
-
-        # ✅ Make widgets expand responsively
-        self.username_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.password_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.login_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-
-        layout.addWidget(self.label_login)
-        layout.addWidget(self.username_input)
-        layout.addWidget(self.password_input)
-        layout.addWidget(self.login_button)
-
+        self.login_button.setStyleSheet("""
+            QPushButton {
+                background-color: #312e81;
+                color: white;
+                padding: 12px;
+                border-radius: 4px;
+                border: none;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #4338ca;
+            }
+            QPushButton:pressed {
+                background-color: #312e81;
+            }
+        """)
+        
+        # Add widgets to form layout
+        form_layout.addWidget(self.username_input)
+        form_layout.addWidget(self.password_input)
+        form_layout.addWidget(self.login_button)
+        form_container.setLayout(form_layout)
+        
+        # Add all elements to main layout with proper spacing
+        layout.addStretch(1)
+        layout.addWidget(logo_container)
+        layout.addSpacing(40)  # Space between logo and form
+        layout.addWidget(form_container, alignment=Qt.AlignCenter)
+        layout.addStretch(1)
+        
+        # Connect login button
         self.login_button.clicked.connect(self.handle_login)
-
+        
         login_widget.setLayout(layout)
         return login_widget
+
     
     def create_add_student_screen(self):
-        """Creates the 'Add Student Individually' screen"""
+        """Creates a compact, scrollable 'Add Student' screen"""
+        # Create main widget
         student_widget = QWidget()
-        layout = QVBoxLayout(student_widget)
-
-        self.name_input = QLineEdit()
-        self.batch_input = QLineEdit()
-        self.position_input = QLineEdit()
-        self.department_input = QLineEdit()
-        self.school_input = QLineEdit()
-
+        
+        # Create scroll area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: white;
+            }
+        """)
+        
+        # Create container widget for scroll area
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setSpacing(10)
+        layout.setContentsMargins(15, 15, 15, 15)
+        
+        # Header
+        title_label = QLabel("Add New Student")
+        title_label.setStyleSheet("""
+            QLabel {
+                color: #312e81;
+                font-size: 18px;
+                font-weight: bold;
+                padding-bottom: 5px;
+            }
+        """)
+        title_label.setAlignment(Qt.AlignCenter)
+        
+        # Form container
+        form_container = QFrame()
+        form_container.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border-radius: 8px;
+            }
+        """)
+        form_layout = QVBoxLayout()
+        form_layout.setSpacing(8)
+        
+        # Input styles
+        input_style = """
+            QLineEdit {
+                padding: 8px;
+                border: 1px solid #e5e7eb;
+                border-radius: 4px;
+                background-color: white;
+                font-size: 13px;
+            }
+            QLineEdit:focus {
+                border: 2px solid #4f46e5;
+            }
+        """
+        
+        label_style = """
+            QLabel {
+                color: #374151;
+                font-size: 13px;
+                font-weight: bold;
+            }
+        """
+        
+        # Create and style input fields
+        fields = [
+            ("Name:", "name_input", "Enter student's full name"),
+            ("Batch:", "batch_input", "Enter batch number/name"),
+            ("Position:", "position_input", "Enter student's position"),
+            ("Department:", "department_input", "Enter department name"),
+            ("School:", "school_input", "Enter school name")
+        ]
+        
+        for label_text, input_name, placeholder in fields:
+            field_container = QWidget()
+            field_layout = QHBoxLayout()
+            field_layout.setContentsMargins(0, 0, 0, 0)
+            
+            label = QLabel(label_text)
+            label.setStyleSheet(label_style)
+            label.setFixedWidth(80)  # Fixed width for labels
+            
+            input_field = QLineEdit()
+            input_field.setPlaceholderText(placeholder)
+            input_field.setStyleSheet(input_style)
+            setattr(self, input_name, input_field)
+            
+            field_layout.addWidget(label)
+            field_layout.addWidget(input_field)
+            field_container.setLayout(field_layout)
+            form_layout.addWidget(field_container)
+        
+        # Button container
+        button_container = QWidget()
+        button_layout = QHBoxLayout()
+        button_layout.setContentsMargins(0, 10, 0, 0)
+        
+        # Submit button
         submit_btn = QPushButton("Submit")
-        submit_btn.clicked.connect(self.submit_student)
-
+        submit_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #312e81;
+                color: white;
+                padding: 8px 16px;
+                border-radius: 4px;
+                border: none;
+                font-weight: bold;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #4338ca;
+            }
+        """)
+        
+        # Back button
         back_btn = QPushButton("Back")
-        back_btn.clicked.connect(lambda: self.stack.setCurrentIndex(1))  # Go back to the menu
-
-        layout.addWidget(QLabel("Name:"))
-        layout.addWidget(self.name_input)
-        layout.addWidget(QLabel("Batch:"))
-        layout.addWidget(self.batch_input)
-        layout.addWidget(QLabel("Position:"))
-        layout.addWidget(self.position_input)
-        layout.addWidget(QLabel("Department:"))
-        layout.addWidget(self.department_input)
-        layout.addWidget(QLabel("School:"))
-        layout.addWidget(self.school_input)
-        layout.addWidget(submit_btn)
-        layout.addWidget(back_btn)
-
+        back_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f3f4f6;
+                color: #374151;
+                padding: 8px 16px;
+                border-radius: 4px;
+                border: 1px solid #e5e7eb;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #e5e7eb;
+            }
+        """)
+        
+        button_layout.addWidget(back_btn)
+        button_layout.addWidget(submit_btn)
+        button_container.setLayout(button_layout)
+        
+        # Connect buttons
+        submit_btn.clicked.connect(self.submit_student)
+        back_btn.clicked.connect(lambda: self.stack.setCurrentIndex(1))
+        
+        # Add everything to layouts
+        form_container.setLayout(form_layout)
+        layout.addWidget(title_label)
+        layout.addWidget(form_container)
+        layout.addWidget(button_container)
+        layout.addStretch()
+        
+        # Set up scroll area
+        scroll.setWidget(container)
+        
+        # Main layout
+        main_layout = QVBoxLayout(student_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
+        
         return student_widget
 
-    
-
     def create_menu_screen(self):
-        """Creates the Main Menu UI after login"""
+        """Creates a modern, clean Menu UI"""
         menu_widget = QWidget()
         layout = QVBoxLayout()
-
-        self.label_menu = QLabel("Welcome! Select an option:")
-        self.add_student_btn = QPushButton("Add Students Individually")
-        self.upload_button = QPushButton("Upload Excel File")
-        self.attendance_history_btn = QPushButton("View Attendance History")  # ✅ New Button
-        self.logout_button = QPushButton("Logout")
-
-        # Add to Layout
-        layout.addWidget(self.label_menu)
-        layout.addWidget(self.add_student_btn)
-        layout.addWidget(self.upload_button)
-        layout.addWidget(self.attendance_history_btn)  # ✅ Add Attendance History Button
-        layout.addWidget(self.logout_button)
-
-        # Set Button Actions
-        self.upload_button.clicked.connect(lambda: self.stack.setCurrentIndex(2))  # ✅ Switch to Upload Screen
-        self.logout_button.clicked.connect(self.logout)  # ✅ Logout
-        self.attendance_history_btn.clicked.connect(lambda: self.load_attendance_data())  # ✅ Load attendance table
-        self.add_student_btn.clicked.connect(lambda: self.stack.setCurrentIndex(3)) 
-
+        layout.setSpacing(15)  # Add space between elements
+        
+        # Create header container
+        header_container = QFrame()
+        header_container.setStyleSheet("""
+            QFrame {
+                background-color: #312e81;
+                border-radius: 8px;
+                padding: 20px;
+                margin-bottom: 20px;
+            }
+        """)
+        header_layout = QVBoxLayout()
+        
+        # Welcome text
+        welcome_label = QLabel("Welcome to Creo.log")
+        welcome_label.setStyleSheet("""
+            QLabel {
+                color: white;
+                font-size: 24px;
+                font-weight: bold;
+            }
+        """)
+        welcome_label.setAlignment(Qt.AlignCenter)
+        
+        subtitle_label = QLabel("Select an option to get started")
+        subtitle_label.setStyleSheet("""
+            QLabel {
+                color: #e5e7eb;
+                font-size: 14px;
+            }
+        """)
+        subtitle_label.setAlignment(Qt.AlignCenter)
+        
+        header_layout.addWidget(welcome_label)
+        header_layout.addWidget(subtitle_label)
+        header_container.setLayout(header_layout)
+        
+        # Create button container
+        button_container = QFrame()
+        button_container.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border-radius: 8px;
+                padding: 20px;
+            }
+        """)
+        button_layout = QVBoxLayout()
+        
+        # Style for all menu buttons
+        button_style = """
+            QPushButton {
+                background-color: #f3f4f6;
+                border: 1px solid #e5e7eb;
+                border-radius: 8px;
+                padding: 15px;
+                text-align: left;
+                font-size: 14px;
+                margin: 5px 0px;
+            }
+            QPushButton:hover {
+                background-color: #e5e7eb;
+                border: 1px solid #d1d5db;
+            }
+            QPushButton:pressed {
+                background-color: #d1d5db;
+            }
+        """
+        
+        # Create menu buttons
+        self.add_student_btn = QPushButton("➕  Add Students Individually")
+        self.upload_button = QPushButton("📊  Upload Excel File")
+        self.attendance_history_btn = QPushButton("📋  View Attendance History")
+        self.logout_button = QPushButton("🚪  Logout")
+        
+        # Apply styles
+        for button in [self.add_student_btn, self.upload_button, 
+                    self.attendance_history_btn, self.logout_button]:
+            button.setStyleSheet(button_style)
+            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            button_layout.addWidget(button)
+        
+        # Style logout button differently
+        self.logout_button.setStyleSheet("""
+            QPushButton {
+                background-color: #fee2e2;
+                border: 1px solid #fecaca;
+                border-radius: 8px;
+                padding: 15px;
+                text-align: left;
+                font-size: 14px;
+                color: #dc2626;
+                margin: 5px 0px;
+            }
+            QPushButton:hover {
+                background-color: #fecaca;
+                border: 1px solid #fca5a5;
+            }
+        """)
+        
+        button_container.setLayout(button_layout)
+        
+        # Add everything to main layout
+        layout.addWidget(header_container)
+        layout.addWidget(button_container)
+        
+        # Connect button actions
+        self.upload_button.clicked.connect(lambda: self.stack.setCurrentIndex(2))
+        self.logout_button.clicked.connect(self.logout)
+        self.attendance_history_btn.clicked.connect(lambda: self.load_attendance_data())
+        self.add_student_btn.clicked.connect(lambda: self.stack.setCurrentIndex(3))
+        
         menu_widget.setLayout(layout)
         return menu_widget
+    
 
     def create_upload_screen(self):
-        """Creates the Upload UI"""
+        """Creates a modern Upload UI screen matching add_student style"""
         upload_widget = QWidget()
         layout = QVBoxLayout()
-
-        self.label_upload = QLabel("Upload an Excel file:")
+        layout.setSpacing(10)
+        layout.setContentsMargins(15, 15, 15, 15)
+        
+        # Title
+        title_label = QLabel("Upload Excel File")
+        title_label.setStyleSheet("""
+            QLabel {
+                color: #312e81;
+                font-size: 18px;
+                font-weight: bold;
+                padding-bottom: 5px;
+            }
+        """)
+        title_label.setAlignment(Qt.AlignCenter)
+        
+        # Form container
+        form_container = QFrame()
+        form_container.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border-radius: 8px;
+            }
+        """)
+        form_layout = QVBoxLayout()
+        form_layout.setSpacing(15)
+        
+        # File selection label
+        self.label_upload = QLabel("No file selected")
+        self.label_upload.setStyleSheet("""
+            QLabel {
+                color: #374151;
+                font-size: 13px;
+                padding: 10px;
+                background-color: #f3f4f6;
+                border-radius: 4px;
+                border: 1px solid #e5e7eb;
+            }
+        """)
+        self.label_upload.setAlignment(Qt.AlignCenter)
+        
+        # Button container
+        button_container = QWidget()
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)
+        
+        # Style buttons
+        button_style = """
+            QPushButton {
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-size: 13px;
+                font-weight: bold;
+            }
+        """
+        
+        # Upload button
         self.upload_button = QPushButton("Select File")
+        self.upload_button.setStyleSheet(button_style + """
+            QPushButton {
+                background-color: #312e81;
+                color: white;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #4338ca;
+            }
+        """)
+        
+        # Process button
         self.process_button = QPushButton("Submit")
-        self.back_button = QPushButton("Back to Menu")  # ✅ New Back Button
-
-        layout.addWidget(self.label_upload)
-        layout.addWidget(self.upload_button)
-        layout.addWidget(self.process_button)
-        layout.addWidget(self.back_button)  # ✅ Add Back Button
-
+        self.process_button.setStyleSheet(button_style + """
+            QPushButton {
+                background-color: #312e81;
+                color: white;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #4338ca;
+            }
+        """)
+        
+        # Back button
+        self.back_button = QPushButton("Back to Menu")
+        self.back_button.setStyleSheet(button_style + """
+            QPushButton {
+                background-color: #f3f4f6;
+                color: #374151;
+                border: 1px solid #e5e7eb;
+            }
+            QPushButton:hover {
+                background-color: #e5e7eb;
+            }
+        """)
+        
+        # Add buttons to layout
+        button_layout.addWidget(self.back_button)
+        button_layout.addWidget(self.upload_button)
+        button_layout.addWidget(self.process_button)
+        button_container.setLayout(button_layout)
+        
+        # Add widgets to form layout
+        form_layout.addWidget(self.label_upload)
+        form_container.setLayout(form_layout)
+        
+        # Add everything to main layout
+        layout.addWidget(title_label)
+        layout.addWidget(form_container)
+        layout.addWidget(button_container)
+        layout.addStretch()
+        
+        # Connect buttons
         self.upload_button.clicked.connect(self.select_file)
         self.process_button.clicked.connect(self.upload_file)
-        self.back_button.clicked.connect(lambda: self.stack.setCurrentIndex(1))  # ✅ Switch to Menu Screen
-
+        self.back_button.clicked.connect(lambda: self.stack.setCurrentIndex(1))
+        
         self.file_path = None
         upload_widget.setLayout(layout)
         return upload_widget
-    
+
     def create_attendance_history_screen(self):
-        """Creates the Attendance History Screen with dynamic filters"""
+        """Creates a modern Attendance History screen with properly initialized components"""
         history_widget = QWidget()
         layout = QVBoxLayout()
+        layout.setSpacing(15)
+        layout.setContentsMargins(15, 15, 15, 15)
+        
+        # Initialize filter components first
+        self.batch_filter = QComboBox()
+        self.position_filter = QComboBox()
+        self.department_filter = QComboBox()
 
-        self.label_history = QLabel("Attendance History")
 
-        self.batch_filter = QComboBox()      # 🟢 Define batch_filter
-        self.position_filter = QComboBox()   # 🟢 Define position_filter
-        self.department_filter = QComboBox() # 🟢 Define department_filter
-
-        # Date Picker
         self.date_filter = QDateEdit()
         self.date_filter.setCalendarPopup(True)
         self.date_filter.setDate(QDate.currentDate())
 
-        # Load filter options from the database
-        self.load_filters()
-
-        # Filter Button
-        self.filter_button = QPushButton("Apply Filter")
-        self.refresh_button = QPushButton("Refresh")
-        self.filter_button.clicked.connect(self.load_attendance_data)
-        self.refresh_button.clicked.connect(self.load_attendance_data)
-
-        # Create the Table
+        calendar = self.date_filter.calendarWidget()
+        calendar.setStyleSheet("""
+            QCalendarWidget {
+                min-width: 250px;
+                min-height: 250px;
+            }
+            QCalendarWidget QToolButton {
+                height: 30px;
+                width: 100px;
+                color: black;
+                font-size: 12px;
+                icon-size: 24px;
+                background-color: white;
+            }
+            QCalendarWidget QMenu {
+                width: 150px;
+                left: 20px;
+                color: black;
+                font-size: 12px;
+                background-color: white;
+            }
+            QCalendarWidget QSpinBox {
+                width: 60px;
+                font-size: 12px;
+                color: black;
+                background-color: white;
+            }
+            QCalendarWidget QAbstractItemView:enabled {
+                font-size: 12px;
+                color: black;
+                background-color: white;
+                selection-background-color: #312e81;
+                selection-color: white;
+            }
+            QCalendarWidget QAbstractItemView:disabled {
+                color: #808080;
+            }
+            QCalendarWidget QWidget#qt_calendar_navigationbar {
+                background-color: #f3f4f6;
+            }
+        """)
+        
+        # Title
+        title_label = QLabel("Attendance History")
+        title_label.setStyleSheet("""
+            QLabel {
+                color: #312e81;
+                font-size: 18px;
+                font-weight: bold;
+                padding-bottom: 5px;
+            }
+        """)
+        title_label.setAlignment(Qt.AlignCenter)
+        
+        # Filter container
+        filter_container = QFrame()
+        filter_container.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border-radius: 8px;
+                padding: 15px;
+            }
+        """)
+        filter_layout = QGridLayout()
+        filter_layout.setSpacing(10)
+        
+        # Style for labels and comboboxes
+        label_style = """
+            QLabel {
+                color: #374151;
+                font-size: 13px;
+                font-weight: bold;
+            }
+        """
+        
+        combo_style = """
+            QComboBox {
+                padding: 8px;
+                border: 1px solid #e5e7eb;
+                border-radius: 4px;
+                background-color: white;
+                min-width: 200px;
+            }
+            QComboBox:hover {
+                border: 1px solid #4338ca;
+            }
+        """
+        
+        # Create and style filters
+        filters = [
+            ("Batch:", self.batch_filter),
+            ("Position:", self.position_filter),
+            ("Department:", self.department_filter)
+        ]
+        
+        for row, (label_text, combo) in enumerate(filters):
+            label = QLabel(label_text)
+            label.setStyleSheet(label_style)
+            combo.setStyleSheet(combo_style)
+            filter_layout.addWidget(label, row, 0)
+            filter_layout.addWidget(combo, row, 1)
+        
+        # Date filter
+        date_label = QLabel("Date:")
+        date_label.setStyleSheet(label_style)
+        self.date_filter.setStyleSheet("""
+            QDateEdit {
+                padding: 8px;
+                border: 1px solid #e5e7eb;
+                border-radius: 4px;
+                background-color: white;
+            }
+        """)
+        filter_layout.addWidget(date_label, 3, 0)
+        filter_layout.addWidget(self.date_filter, 3, 1)
+        
+        filter_container.setLayout(filter_layout)
+        
+        # Initialize and style table
         self.table = QTableWidget()
-        self.table.setColumnCount(7)  # Name, Batch, Position, Department, Date, Time In, Time Out
+        self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels(["Name", "Batch", "Position", "Department", "Date", "Time In", "Time Out"])
+        self.table.setStyleSheet("""
+            QTableWidget {
+                border: 1px solid #e5e7eb;
+                border-radius: 4px;
+                background-color: white;
+            }
+            QHeaderView::section {
+                background-color: #f3f4f6;
+                padding: 8px;
+                border: none;
+                border-right: 1px solid #e5e7eb;
+                border-bottom: 1px solid #e5e7eb;
+                font-weight: bold;
+                color: #374151;
+            }
+        """)
+        
+        # Button container
+        button_container = QWidget()
+        button_layout = QHBoxLayout()
+        
+        # Style buttons
+        button_style = """
+            QPushButton {
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-size: 13px;
+                font-weight: bold;
+            }
+        """
+        
+        # Create buttons
+        filter_button = QPushButton("Apply Filter")
+        filter_button.setStyleSheet(button_style + """
+            QPushButton {
+                background-color: #312e81;
+                color: white;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #4338ca;
+            }
+        """)
 
-        layout.addWidget(self.label_history)
-        layout.addWidget(QLabel("Batch:"))
-        layout.addWidget(self.batch_filter)
-        layout.addWidget(QLabel("Position:"))
-        layout.addWidget(self.position_filter)
-        layout.addWidget(QLabel("Department:"))
-        layout.addWidget(self.department_filter)
-        layout.addWidget(QLabel("Date:"))
-        layout.addWidget(self.date_filter)
-        layout.addWidget(self.filter_button)
-        layout.addWidget(self.refresh_button)
+        download_button = QPushButton("Download Results")
+        download_button.setStyleSheet(button_style + """
+            QPushButton {
+                background-color: #047857;
+                color: white;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #059669;
+            }
+        """)
+        
+        refresh_button = QPushButton("Refresh")
+        refresh_button.setStyleSheet(button_style + """
+            QPushButton {
+                background-color: #312e81;
+                color: white;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #4338ca;
+            }
+        """)
+        
+        back_button = QPushButton("Back to Menu")
+        back_button.setStyleSheet(button_style + """
+            QPushButton {
+                background-color: #f3f4f6;
+                color: #374151;
+                border: 1px solid #e5e7eb;
+            }
+            QPushButton:hover {
+                background-color: #e5e7eb;
+            }
+        """)
+        
+        # Add buttons to layout
+        button_layout.addWidget(back_button)
+        button_layout.addStretch()
+        button_layout.addWidget(filter_button)
+        button_layout.addWidget(download_button)
+        button_layout.addWidget(refresh_button)
+        button_container.setLayout(button_layout)
+        
+        # Connect buttons
+        filter_button.clicked.connect(self.load_attendance_data)
+        refresh_button.clicked.connect(self.load_attendance_data)
+        back_button.clicked.connect(lambda: self.stack.setCurrentIndex(1))
+        download_button.clicked.connect(self.download_attendance_data)
+        
+        # Load initial filter data
+        self.load_filters()
+        
+        # Add everything to main layout
+        layout.addWidget(title_label)
+        layout.addWidget(filter_container)
         layout.addWidget(self.table)
-
-        # Back Button
-        self.back_to_menu_button = QPushButton("Back to Menu")
-        self.back_to_menu_button.clicked.connect(lambda: self.stack.setCurrentIndex(1))
-        layout.addWidget(self.back_to_menu_button)
-
+        layout.addWidget(button_container)
+        
         history_widget.setLayout(layout)
         return history_widget
 
@@ -347,6 +953,65 @@ class MainApp(QWidget):
             self.department_filter.addItem("All", "")
             for department in data["departments"]:
                 self.department_filter.addItem(department.strip(), department.strip())
+
+
+    # Add new method to handle downloading attendance data
+    def download_attendance_data(self):
+        """Downloads filtered attendance data as Excel file"""
+        # Get current filter values
+        batch = self.batch_filter.currentText()
+        position = self.position_filter.currentText()
+        department = self.department_filter.currentText()
+        date = self.date_filter.date().toString("yyyy-MM-dd")
+        
+        # Only include non-"All" values
+        params = {}
+        if batch and batch != "All":
+            params["batch"] = batch
+        if position and position != "All":
+            params["position"] = position
+        if department and department != "All":
+            params["department"] = department
+        if date:
+            params["date"] = date
+            
+        response = session.get(f"{API_ATTENDANCE}/download", params=params)
+        
+        if response.status_code == 200:
+            # Open file dialog to choose save location
+            file_dialog = QFileDialog()
+            file_path, _ = file_dialog.getSaveFileName(
+                self,
+                "Save Attendance Report",
+                "",
+                "Excel Files (*.xlsx)"
+            )
+            
+            if file_path:
+                if not file_path.endswith('.xlsx'):
+                    file_path += '.xlsx'
+                    
+                # Save the file
+                with open(file_path, 'wb') as f:
+                    f.write(response.content)
+                
+                QMessageBox.information(
+                    self,
+                    "Success",
+                    f"Attendance report has been downloaded to:\n{file_path}"
+                )
+        elif response.status_code == 404:
+            QMessageBox.warning(
+                self,
+                "No Data",
+                "No attendance records found for the selected filters."
+            )
+        else:
+            QMessageBox.critical(
+                self,
+                "Error",
+                "Failed to download attendance report."
+            )
 
 
 if __name__ == "__main__":

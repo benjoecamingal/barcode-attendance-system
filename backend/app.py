@@ -11,7 +11,12 @@ from docx.shared import Pt
 from barcode import Code128
 from barcode.writer import ImageWriter
 import time
-# from barcode_image_generator import generate_barcode_image
+import io
+from datetime import datetime, timedelta
+import openpyxl
+from openpyxl.styles import NamedStyle
+from openpyxl.utils import get_column_letter
+
 
 # Flask App Configuration
 app = Flask(__name__)
@@ -233,19 +238,16 @@ def upload_file():
 @app.route("/add_student", methods=["POST"])
 def add_student():
     """Handles adding an individual student to the database"""
-    print("Session at /add_student:", session)  # Debugging
+    print("Session at /add_student:", session)
 
-    # Check if the user is authenticated
     if "user" not in session:
         return jsonify({"error": "Unauthorized"}), 403  
 
-    # Ensure request contains JSON data
     if not request.is_json:
         return jsonify({"error": "Invalid request format. JSON required"}), 400  
 
     data = request.get_json()
 
-    # Extract and validate required fields
     required_fields = ["name", "batch", "position", "department", "school"]
     missing_fields = [field for field in required_fields if not data.get(field)]
 
@@ -259,21 +261,50 @@ def add_student():
     school = data["school"].strip()
 
     try:
+        # Generate barcode
+        barcode = generate_barcode()
+
+        # Generate barcode image
+        base_path = os.path.join(PROCESSED_FOLDER, f"barcode_{barcode}")
+        barcode_path = f"{base_path}.png"
+        
+        if not generate_barcode_image(barcode, base_path):
+            return jsonify({"error": "Failed to generate barcode image"}), 500
+
         # Insert into database
         db = get_db_connection()
         cursor = db.cursor()
         query = """INSERT INTO students (name, batch, position, department, school, barcode)
                    VALUES (%s, %s, %s, %s, %s, %s)"""
-        barcode = generate_barcode() 
         cursor.execute(query, (name, batch, position, department, school, barcode))
         db.commit()
         cursor.close()
 
-        return jsonify({"message": "Student added successfully!"}), 200
+        # Create a single-row DataFrame for the new student
+        student_data = pd.DataFrame([{
+            'Name': name,
+            'Batch': batch,
+            'Position': position,
+            'Department': department,
+            'School': school,
+            'Barcode': barcode
+        }])
+
+        # Generate Word document
+        output_docx = os.path.join(PROCESSED_FOLDER, f"student_barcode_{barcode}.docx")
+        generate_word_document(student_data, output_docx, {barcode: barcode_path})
+
+        # Return the Word document along with success message
+        return send_file(
+            output_docx,
+            as_attachment=True,
+            download_name=f"student_barcode_{name}.docx",
+            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        )
+
     except Exception as e:
         print(str(e))
         return jsonify({"error": "Database error", "details": str(e)}), 500
-
 
 # Logout Route
 @app.route("/logout", methods=["POST"])
@@ -459,6 +490,125 @@ def get_filters():
     finally:
         cursor.close()
         db.close()
+
+
+def format_excel_time(worksheet):
+    """Apply time formatting to Time In and Time Out columns"""
+    # Create time style
+    time_style = NamedStyle(name='time_style')
+    time_style.number_format = 'HH:MM:SS'
+    
+    # Find Time In and Time Out columns
+    headers = [cell.value for cell in worksheet[1]]
+    time_in_col = headers.index('Time In') + 1 if 'Time In' in headers else None
+    time_out_col = headers.index('Time Out') + 1 if 'Time Out' in headers else None
+    
+    # Apply formatting
+    if time_in_col:
+        for cell in worksheet[get_column_letter(time_in_col)][1:]:
+            cell.style = time_style
+    if time_out_col:
+        for cell in worksheet[get_column_letter(time_out_col)][1:]:
+            cell.style = time_style
+
+@app.route('/attendance/download', methods=['GET'])
+def download_attendance():
+    """Generate and send attendance data as Excel file"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Get filters from request
+        batch = request.args.get('batch')
+        position = request.args.get('position')
+        department = request.args.get('department')
+        date = request.args.get('date')
+
+        # Base query
+        query = """
+            SELECT 
+                s.name as 'Name',
+                s.batch as 'Batch',
+                s.position as 'Position',
+                s.department as 'Department',
+                a.date as 'Date',
+                a.time_in as 'Time In',
+                a.time_out as 'Time Out'
+            FROM attendance a
+            JOIN students s ON a.student_id = s.id
+            WHERE 1=1
+        """
+        filters = []
+
+        # Add filters
+        if batch:
+            query += " AND s.batch = %s"
+            filters.append(batch)
+        if position:
+            query += " AND s.position = %s"
+            filters.append(position)
+        if department:
+            query += " AND s.department = %s"
+            filters.append(department)
+        if date:
+            query += " AND a.date = %s"
+            filters.append(date)
+
+        query += " ORDER BY a.date DESC, s.name ASC"
+
+        # Execute query
+        cursor.execute(query, tuple(filters))
+        records = cursor.fetchall()
+        print("Fetched Records:", records)  # Debugging
+
+        # ✅ Convert timedelta (Time In/Out) to HH:MM:SS string
+        for record in records:
+            if isinstance(record['Time In'], timedelta):  # ✅ Use timedelta directly
+                record['Time In'] = str(record['Time In'])
+            if isinstance(record['Time Out'], timedelta):  # ✅ Use timedelta directly
+                record['Time Out'] = str(record['Time Out'])
+
+        # Convert to DataFrame
+        df = pd.DataFrame(records)
+
+        # Create Excel file in memory
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name='Attendance', index=False)
+
+            # Auto-adjust column widths
+            worksheet = writer.sheets['Attendance']
+            for idx, col in enumerate(df.columns):
+                max_length = max(
+                    df[col].astype(str).apply(len).max(),
+                    len(col)
+                ) + 2
+                worksheet.column_dimensions[chr(65 + idx)].width = max_length
+
+        output.seek(0)
+
+        # Generate filename with current date
+        current_date = datetime.now().strftime('%Y%m%d')
+        filename = f"attendance_report_{current_date}.xlsx"
+
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+
+    except Exception as e:
+        print("Error in download_attendance():", str(e))  # Debugging
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+
+
 # Run Flask App
 if __name__ == "__main__":
     app.run(debug=True)
