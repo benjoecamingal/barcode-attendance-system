@@ -36,16 +36,28 @@ class BarcodeScanner(QWidget):
         self.info_label.setFont(QFont("Arial", 20))
         self.info_label.setAlignment(Qt.AlignCenter)
 
+        # Add ESC instruction label
+        self.esc_label = QLabel("Press ESC to exit", self)
+        self.esc_label.setFont(QFont("Arial", 12))
+        self.esc_label.setAlignment(Qt.AlignCenter)
+
         # Layout
         layout = QVBoxLayout()
         layout.addWidget(self.label)
         layout.addWidget(self.input_barcode)
         layout.addWidget(self.submit_button)
         layout.addWidget(self.info_label)
+        layout.addWidget(self.esc_label)  # Add ESC instruction to layout
         self.setLayout(layout)
 
     def keyPressEvent(self, event):
-        """Capture barcode input from scanner"""
+        """Capture barcode input from scanner and handle ESC key"""
+        # Check for ESC key
+        if event.key() == Qt.Key_Escape:
+            self.close()  # Close the application
+            return
+
+        # Original barcode scanning logic
         barcode = event.text().strip()
         if barcode:
             self.send_barcode(barcode)

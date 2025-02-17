@@ -17,6 +17,18 @@ import openpyxl
 from openpyxl.styles import NamedStyle
 from openpyxl.utils import get_column_letter
 
+from docx.shared import Inches
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+
+from docx.shared import Inches, Pt
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx import Document
+
+from docx.shared import Inches, Pt
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx import Document
+import os
+
 
 # Flask App Configuration
 app = Flask(__name__)
@@ -73,17 +85,7 @@ def generate_barcode_image(barcode_number, output_path):
         print(f"Error generating barcode: {str(e)}")
         return False
 
-from docx.shared import Inches
-from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 
-from docx.shared import Inches, Pt
-from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
-from docx import Document
-
-from docx.shared import Inches, Pt
-from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
-from docx import Document
-import os
 
 def generate_word_document(dataframe, output_path, barcode_paths):
     doc = Document()
