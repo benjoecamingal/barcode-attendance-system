@@ -5,9 +5,10 @@ from PyQt5.QtWidgets import (
     QDesktopWidget, QSizePolicy, QTableWidget, QTableWidgetItem, QComboBox, QDateEdit, QFrame, QScrollArea,
     QScrollArea, QHBoxLayout, QGridLayout
 )
+import os
 
-
-from PyQt5.QtCore import QDate, Qt
+from pathlib import Path    
+from PyQt5.QtCore import QDate, Qt, QStandardPaths
 from PyQt5.QtGui import QIcon, QFont
 import requests
 
@@ -52,6 +53,29 @@ class MainApp(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(self.stack)
         self.setLayout(layout)
+
+        self.download_path = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
+
+    def save_file_to_downloads(self, file_data, suggested_filename):
+        """Saves received file data to user's chosen location"""
+        file_dialog = QFileDialog()
+        file_path, _ = file_dialog.getSaveFileName(
+            self,
+            "Save File",
+            os.path.join(self.download_path, suggested_filename),
+            "Word Documents (*.docx);;Excel Files (*.xlsx);;All Files (*.*)"
+        )
+        
+        if file_path:
+            try:
+                with open(file_path, 'wb') as f:
+                    f.write(file_data)
+                QMessageBox.information(self, "Success", f"File saved successfully to:\n{file_path}")
+                return True
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to save file: {str(e)}")
+                return False
+        return False
 
     def center_window(self):
         """Centers the window on the screen"""
@@ -856,19 +880,22 @@ class MainApp(QWidget):
             self.label_upload.setText(f"Selected: {file_path}")
 
     def upload_file(self):
-        """Uploads selected file to backend"""
+        """Modified upload_file method to handle file download"""
         if not self.file_path:
             self.label_upload.setText("Please select a file first.")
             return
 
         with open(self.file_path, "rb") as file:
             files = {"file": file}
-            response = session.post(API_UPLOAD, files=files)  # ✅ Now session is defined
-
-        # print("Upload Response:", response.status_code, response.text)  # Debugging
+            response = session.post(API_UPLOAD, files=files)
 
         if response.status_code == 200:
-            self.label_upload.setText("File processed successfully!")
+            # Save the returned file
+            filename = os.path.splitext(os.path.basename(self.file_path))[0] + "_processed.docx"
+            if self.save_file_to_downloads(response.content, filename):
+                self.label_upload.setText("File processed and saved successfully!")
+            else:
+                self.label_upload.setText("File processed but not saved.")
         else:
             self.label_upload.setText(f"Error processing file: {response.text}")
 
@@ -879,8 +906,9 @@ class MainApp(QWidget):
         self.password_input.clear()
         QMessageBox.information(self, "Logged Out", "You have been logged out.")
 
+
     def submit_student(self):
-        """Handles adding a student to the database"""
+        """Modified submit_student method to handle file download"""
         data = {
             "name": self.name_input.text(),
             "batch": self.batch_input.text(),
@@ -892,8 +920,13 @@ class MainApp(QWidget):
         response = session.post(API_STUDENT, json=data)
 
         if response.status_code == 200:
-            QMessageBox.information(self, "Success", "Student added successfully!")
-            self.stack.setCurrentIndex(1)  # Return to menu
+            # Save the returned file
+            filename = f"student_barcode_{data['name']}.docx"
+            if self.save_file_to_downloads(response.content, filename):
+                QMessageBox.information(self, "Success", "Student added successfully!")
+                self.stack.setCurrentIndex(1)  # Return to menu
+            else:
+                QMessageBox.warning(self, "Warning", "Student added but barcode file not saved.")
         else:
             QMessageBox.critical(self, "Error", "Failed to add student.")
 
@@ -978,27 +1011,16 @@ class MainApp(QWidget):
         response = session.get(f"{API_ATTENDANCE}/download", params=params)
         
         if response.status_code == 200:
-            # Open file dialog to choose save location
-            file_dialog = QFileDialog()
-            file_path, _ = file_dialog.getSaveFileName(
-                self,
-                "Save Attendance Report",
-                "",
-                "Excel Files (*.xlsx)"
-            )
+            # Generate filename with current date
+            from datetime import datetime
+            current_date = datetime.now().strftime('%Y%m%d')
+            filename = f"attendance_report_{current_date}.xlsx"
             
-            if file_path:
-                if not file_path.endswith('.xlsx'):
-                    file_path += '.xlsx'
-                    
-                # Save the file
-                with open(file_path, 'wb') as f:
-                    f.write(response.content)
-                
+            if self.save_file_to_downloads(response.content, filename):
                 QMessageBox.information(
                     self,
                     "Success",
-                    f"Attendance report has been downloaded to:\n{file_path}"
+                    "Attendance report has been downloaded successfully!"
                 )
         elif response.status_code == 404:
             QMessageBox.warning(
@@ -1012,7 +1034,6 @@ class MainApp(QWidget):
                 "Error",
                 "Failed to download attendance report."
             )
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

@@ -29,6 +29,7 @@ from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from docx import Document
 import os
 
+import tempfile
 
 # Flask App Configuration
 app = Flask(__name__)
@@ -36,10 +37,8 @@ app.secret_key = "your_secret_key"  # Required for session management
 app.config['SESSION_COOKIE_NAME'] = 'my_session'  # Ensures session persistence
 CORS(app, supports_credentials=True)  # Allow session cookies in CORS requests
 
-UPLOAD_FOLDER = "../uploads/"
-PROCESSED_FOLDER = os.path.abspath("../processed_files/")
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(PROCESSED_FOLDER, exist_ok=True)
+UPLOAD_FOLDER = tempfile.gettempdir()  # Temporary directory for uploads
+PROCESSED_FOLDER = tempfile.gettempdir()  # Temporary directory for processing
 
 
 # Login Route
@@ -165,148 +164,232 @@ def generate_unique_barcode(cursor):
 # File Upload & Barcode Processing
 @app.route("/upload", methods=["POST"])
 def upload_file():
-    if "file" not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
-
-    file = request.files["file"]
-    if file.filename == "":
-        return jsonify({"error": "No selected file"}), 400
-
-    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
-    file.save(file_path)
-
-    # Read the Excel file
-    df = pd.read_excel(file_path, engine="openpyxl")
-
-    # ✅ Remove empty rows
-    df.dropna(how="all", inplace=True)
-
-    # ✅ Fill NaN values with empty strings to prevent MySQL errors
-    df.fillna("", inplace=True)
-
-    if df.empty:
-        return jsonify({"error": "Uploaded file is empty"}), 400
-
-    # ✅ Connect to database
-    db = get_db_connection()
-    cursor = db.cursor()
-
-    # ✅ Ensure "Barcode" column is auto-generated
-    if "Barcode" not in df.columns:
-        df["Barcode"] = df.apply(lambda _: generate_unique_barcode(cursor), axis=1)
-
-    # ✅ Generate barcode images BEFORE inserting them into Word
+    temp_file = None
+    output_docx = None
     barcode_paths = {}
-    for _, row in df.iterrows():
-        barcode_number = row["Barcode"]
-        # Construct path without .png extension
-        base_path = os.path.join(PROCESSED_FOLDER, f"barcode_{barcode_number}")
-        barcode_path = f"{base_path}.png"  # Add .png for the final path
+    
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+            
+        file = request.files["file"]
+        if file.filename == "":
+            return jsonify({"error": "No selected file"}), 400
+
+        # Create temporary file
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
+        file.save(temp_file.name)
         
-        # Generate barcode (pass path without extension)
-        if generate_barcode_image(barcode_number, base_path):
-            barcode_paths[barcode_number] = barcode_path
-        else:
-            print(f"Failed to generate barcode for: {barcode_number}")
+        # Close the file handle explicitly
+        temp_file.close()
+        
+        # Read Excel file
+        df = pd.read_excel(temp_file.name, engine="openpyxl")
+        
+        # Basic data validation
+        df.dropna(how="all", inplace=True)
+        df.fillna("", inplace=True)
+        
+        if df.empty:
+            raise ValueError("Uploaded file is empty")
+            
+        # Verify required columns
+        required_columns = ["Name", "Batch", "Position", "Department", "School"]
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            raise ValueError(f"Missing required columns: {', '.join(missing_columns)}")
 
-    # ✅ Register all students in the database
-    for _, row in df.iterrows():
-        student_dict = row.to_dict()
-        columns = ", ".join(student_dict.keys())
-        placeholders = ", ".join(["%s"] * len(student_dict))
-        values = tuple(student_dict.values())
-
-        query = f"INSERT INTO students ({columns}) VALUES ({placeholders})"
+        # Connect to database
+        db = get_db_connection()
+        cursor = db.cursor()
+        
         try:
-            cursor.execute(query, values)
-        except Exception as e:
+            # Generate barcodes for each row if needed
+            if "Barcode" not in df.columns:
+                df["Barcode"] = df.apply(lambda _: generate_unique_barcode(cursor), axis=1)
+
+            # Store barcode images
+            for _, row in df.iterrows():
+                barcode_number = row["Barcode"]
+                base_path = os.path.join(tempfile.gettempdir(), f"barcode_{barcode_number}")
+                barcode_path = f"{base_path}.png"
+                
+                if generate_barcode_image(barcode_number, base_path):
+                    barcode_paths[barcode_number] = barcode_path
+
+            # Insert data into database
+            for _, row in df.iterrows():
+                student_dict = row.to_dict()
+                columns = ", ".join(student_dict.keys())
+                placeholders = ", ".join(["%s"] * len(student_dict))
+                values = tuple(student_dict.values())
+                query = f"INSERT INTO students ({columns}) VALUES ({placeholders})"
+                cursor.execute(query, values)
+            
+            db.commit()
+
+            # Generate Word document
+            output_docx = os.path.join(tempfile.gettempdir(), "student_barcodes.docx")
+            generate_word_document(df, output_docx, barcode_paths)
+
+            # Read the file into memory before sending
+            with open(output_docx, 'rb') as f:
+                file_data = io.BytesIO(f.read())
+
+            # Clean up files before sending response
+            cleanup_files(temp_file.name, output_docx, barcode_paths)
+
+            # Send file from memory
+            file_data.seek(0)
+            return send_file(
+                file_data,
+                as_attachment=True,
+                download_name="student_barcodes.docx",
+                mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            )
+
+        except Exception as db_error:
             db.rollback()
-            return jsonify({"error": str(e)}), 400
+            raise db_error
 
-    db.commit()
-    cursor.close()
-    db.close()
+        finally:
+            cursor.close()
+            db.close()
 
-    # time.sleep(5)
-    # ✅ Generate Word File
-    output_docx = os.path.join(PROCESSED_FOLDER, "student_barcodes.docx")
-    generate_word_document(df, output_docx, barcode_paths)
+    except Exception as e:
+        # Clean up files in case of error
+        cleanup_files(
+            temp_file.name if temp_file else None,
+            output_docx if output_docx else None,
+            barcode_paths
+        )
+        return jsonify({"error": str(e)}), 500
 
-    return send_file(output_docx, as_attachment=True)
 
+def cleanup_files(temp_file_path, output_docx_path, barcode_paths):
+    """Helper function to clean up temporary files"""
+    # Clean up temporary Excel file
+    if temp_file_path and os.path.exists(temp_file_path):
+        try:
+            os.unlink(temp_file_path)
+        except (PermissionError, OSError):
+            pass  # Ignore errors if file is still in use
+            
+    # Clean up generated Word document  
+    if output_docx_path and os.path.exists(output_docx_path):
+        try:
+            os.unlink(output_docx_path)
+        except (PermissionError, OSError):
+            pass
+            
+    # Clean up barcode images
+    for path in barcode_paths.values():
+        if os.path.exists(path):
+            try:
+                os.unlink(path)
+            except (PermissionError, OSError):
+                pass
 
     
 
 @app.route("/add_student", methods=["POST"])
 def add_student():
-    """Handles adding an individual student to the database"""
-    print("Session at /add_student:", session)
-
-    if "user" not in session:
-        return jsonify({"error": "Unauthorized"}), 403  
-
-    if not request.is_json:
-        return jsonify({"error": "Invalid request format. JSON required"}), 400  
-
-    data = request.get_json()
-
-    required_fields = ["name", "batch", "position", "department", "school"]
-    missing_fields = [field for field in required_fields if not data.get(field)]
-
-    if missing_fields:
-        return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400  
-
-    name = data["name"].strip()
-    batch = data["batch"].strip()
-    position = data["position"].strip()
-    department = data["department"].strip()
-    school = data["school"].strip()
-
+    """Handles adding an individual student to the database and generates Word document"""
+    temp_file = None
+    output_docx = None
+    barcode_paths = {}
+    
     try:
-        # Generate barcode
-        barcode = generate_barcode()
+        if "user" not in session:
+            return jsonify({"error": "Unauthorized"}), 403
 
-        # Generate barcode image
-        base_path = os.path.join(PROCESSED_FOLDER, f"barcode_{barcode}")
-        barcode_path = f"{base_path}.png"
-        
-        if not generate_barcode_image(barcode, base_path):
-            return jsonify({"error": "Failed to generate barcode image"}), 500
+        if not request.is_json:
+            return jsonify({"error": "Invalid request format. JSON required"}), 400
 
-        # Insert into database
-        db = get_db_connection()
-        cursor = db.cursor()
-        query = """INSERT INTO students (name, batch, position, department, school, barcode)
-                   VALUES (%s, %s, %s, %s, %s, %s)"""
-        cursor.execute(query, (name, batch, position, department, school, barcode))
-        db.commit()
-        cursor.close()
+        data = request.get_json()
+        required_fields = ["name", "batch", "position", "department", "school"]
+        missing_fields = [field for field in required_fields if not data.get(field)]
 
-        # Create a single-row DataFrame for the new student
-        student_data = pd.DataFrame([{
-            'Name': name,
-            'Batch': batch,
-            'Position': position,
-            'Department': department,
-            'School': school,
-            'Barcode': barcode
+        if missing_fields:
+            return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
+
+        # Create a single-row DataFrame from the submitted data
+        df = pd.DataFrame([{
+            'Name': data["name"].strip(),
+            'Batch': data["batch"].strip(),
+            'Position': data["position"].strip(),
+            'Department': data["department"].strip(),
+            'School': data["school"].strip()
         }])
 
-        # Generate Word document
-        output_docx = os.path.join(PROCESSED_FOLDER, f"student_barcode_{barcode}.docx")
-        generate_word_document(student_data, output_docx, {barcode: barcode_path})
+        # Basic data validation
+        if df.empty:
+            raise ValueError("No valid data provided")
 
-        # Return the Word document along with success message
-        return send_file(
-            output_docx,
-            as_attachment=True,
-            download_name=f"student_barcode_{name}.docx",
-            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        )
+        # Connect to database
+        db = get_db_connection()
+        cursor = db.cursor()
+        
+        try:
+            # Generate unique barcode
+            barcode = generate_unique_barcode(cursor)
+            df["Barcode"] = barcode
+
+            # Generate and store barcode image
+            base_path = os.path.join(tempfile.gettempdir(), f"barcode_{barcode}")
+            barcode_path = f"{base_path}.png"
+            
+            if generate_barcode_image(barcode, base_path):
+                barcode_paths[barcode] = barcode_path
+            else:
+                raise Exception("Failed to generate barcode image")
+
+            # Insert data into database
+            student_dict = df.iloc[0].to_dict()
+            columns = ", ".join(student_dict.keys())
+            placeholders = ", ".join(["%s"] * len(student_dict))
+            values = tuple(student_dict.values())
+            query = f"INSERT INTO students ({columns}) VALUES ({placeholders})"
+            cursor.execute(query, values)
+            
+            db.commit()
+
+            # Generate Word document
+            output_docx = os.path.join(tempfile.gettempdir(), f"student_barcode_{barcode}.docx")
+            generate_word_document(df, output_docx, barcode_paths)
+
+            # Read the file into memory before sending
+            with open(output_docx, 'rb') as f:
+                file_data = io.BytesIO(f.read())
+
+            # Clean up files before sending response
+            cleanup_files(None, output_docx, barcode_paths)
+
+            # Send file from memory
+            file_data.seek(0)
+            return send_file(
+                file_data,
+                as_attachment=True,
+                download_name=f"student_barcode_{data['name']}.docx",
+                mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            )
+
+        except Exception as db_error:
+            db.rollback()
+            raise db_error
+
+        finally:
+            cursor.close()
+            db.close()
 
     except Exception as e:
-        print(str(e))
-        return jsonify({"error": "Database error", "details": str(e)}), 500
+        # Clean up files in case of error
+        cleanup_files(
+            temp_file.name if temp_file else None,
+            output_docx if output_docx else None,
+            barcode_paths
+        )
+        return jsonify({"error": str(e)}), 500
 
 # Logout Route
 @app.route("/logout", methods=["POST"])
@@ -613,4 +696,4 @@ def download_attendance():
 
 # Run Flask App
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
