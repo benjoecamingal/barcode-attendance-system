@@ -33,7 +33,6 @@ def generate_barcode_image(barcode_number, output_path):
         saved_path = barcode.save(output_path)
         return True
     except Exception as e:
-        print(f"Error generating barcode: {str(e)}")
         return False
 
 def generate_word_document(dataframe, output_path, barcode_paths):
@@ -65,23 +64,22 @@ def generate_word_document(dataframe, output_path, barcode_paths):
         # Add name (Centered, Large, Bold) in the same paragraph
         run = paragraph.add_run(f"{name}\n")
         run.bold = True
-        run.font.size = Pt(20)
+        run.font.size = Pt(14)
 
         # Add barcode image in the same paragraph, inline with the name
         try:
             run_img = paragraph.add_run()
-            run_img.add_picture(barcode_path, width=Inches(2.5), height=Inches(1))
+            run_img.add_picture(barcode_path, width=Inches(1.5), height=Inches(0.75))
         except Exception as e:
             error_p = doc.add_paragraph("[ERROR: Could not add barcode image]")
             error_p.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-            print(f"Error adding barcode image: {str(e)}")
 
-        doc.add_paragraph("-" * 30).alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+        # doc.add_paragraph("-" * 30).alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
     try:
         doc.save(output_path)
     except Exception as e:
-        print(f"Error saving document: {str(e)}")
+        pass
 
 def generate_unique_barcode(cursor):
     while True:
@@ -267,7 +265,7 @@ def process_scan():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, name, department FROM students WHERE barcode = %s", (barcode,))
+        cursor.execute("SELECT id, name, department FROM students WHERE barcode = %s", (barcode.strip(),))
         student = cursor.fetchone()
 
         if not student:
@@ -283,36 +281,55 @@ def process_scan():
             attendance_id, time_in, time_out = record
             if time_in and not time_out:
                 cursor.execute(
-                    "UPDATE attendance SET time_out = CURRENT_TIME WHERE id = %s",
+                    "UPDATE attendance SET time_out = CURRENT_TIME, date = CURDATE() WHERE id = %s",
                     (attendance_id,))
                 conn.commit()
+                time_out_formatted = datetime.now().strftime("%I:%M %p") if time_out is None else datetime.strptime(str(time_out), "%H:%M:%S").strftime("%I:%M %p")
+                time_in_formatted = datetime.strptime(str(time_in), "%H:%M:%S").strftime("%I:%M %p") if time_in else "N/A"
                 return jsonify({
                     "success": True,
                     "message": f"Time Out recorded for {student_name}",
                     "name": student_name,
                     "department": department,
-                    "time": str(time_out) if time_out else "N/A",
+                    "time_in": time_in_formatted,
+                    "time_out": time_out_formatted,
                     "status": "Time Out",
                     "date": "Today"
                 })
-            return jsonify({"success": False, "message": "Already Timed Out for Today"})
+            time_in_formatted = datetime.strptime(str(time_in), "%H:%M:%S").strftime("%I:%M %p") if time_in else "N/A"
+            time_out_formatted = datetime.strptime(str(time_out), "%H:%M:%S").strftime("%I:%M %p") if time_out else "N/A"
+            return jsonify({
+                "success": False,
+                "message": "Already Timed Out for Today",
+                "name": student_name,
+                "department": department,
+                "time_in": time_in_formatted,
+                "time_out": time_out_formatted,
+                "status": "Already Timed Out",
+                "date": "Today"
+            })
         else:
+            current_time = datetime.now()
+            time_in_formatted = current_time.strftime("%I:%M %p")
             cursor.execute(
-                "INSERT INTO attendance (student_id, date, time_in) VALUES (%s, CURDATE(), CURRENT_TIME)",
-                (student_id,))
+                "INSERT INTO attendance (student_id, date, time_in) VALUES (%s, CURDATE(), %s)",
+                (student_id, current_time.time()))
             conn.commit()
             return jsonify({
                 "success": True,
                 "message": f"Time In recorded for {student_name}",
                 "name": student_name,
                 "department": department,
-                "time": "Now",
+                "time_in": time_in_formatted,
+                "time_out": "N/A",
                 "status": "Time In",
                 "date": "Today"
             })
 
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        conn.close()
 
 @app.route('/attendance', methods=['GET'])
 def get_attendance():
@@ -364,6 +381,8 @@ def get_attendance():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()  # Ensure database connection is closed
 
 @app.route('/filters', methods=['GET'])
 def get_filters():
@@ -392,6 +411,8 @@ def get_filters():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()  # Ensure database connection is closed
 
 @app.route('/attendance/download', methods=['GET'])
 def download_attendance():
@@ -477,6 +498,8 @@ def download_attendance():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()  # Ensure database connection is closed
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000, debug=True)

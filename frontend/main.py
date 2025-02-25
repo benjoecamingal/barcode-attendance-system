@@ -8,18 +8,19 @@ from PyQt5.QtCore import QDate, Qt, QStandardPaths
 from PyQt5.QtGui import QPixmap, QIcon
 from datetime import datetime
 
-API_LOGIN = "http://127.0.0.1:5000/login"
-API_UPLOAD = "http://127.0.0.1:5000/upload"
-API_STUDENT = "http://127.0.0.1:5000/add_student"
-API_ATTENDANCE = "http://127.0.0.1:5000/attendance"
-API_FILTERS = "http://127.0.0.1:5000/filters"
+# Update API URLs to your PythonAnywhere Flask app URL
+API_LOGIN = "https://wehilah806.pythonanywhere.com/login"
+API_UPLOAD = "https://wehilah806.pythonanywhere.com/upload"
+API_STUDENT = "https://wehilah806.pythonanywhere.com/add_student"
+API_ATTENDANCE = "https://wehilah806.pythonanywhere.com/attendance"
+API_FILTERS = "https://wehilah806.pythonanywhere.com/filters"
 
 session = requests.Session()
 
 class MainApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowIcon(QIcon("static/favicon.ico"))
+        self.setWindowIcon(QIcon("favicon.ico"))
         self.setWindowTitle("Creo.log")
         self.resize(800, 600)
         self.center_window()
@@ -75,8 +76,8 @@ class MainApp(QWidget):
         logo_container = QWidget()
         logo_layout = QVBoxLayout()
         logo_label = QLabel()
-        pixmap = QPixmap("creotec_logo.png")  # Update with your image path
-        logo_label.setPixmap(pixmap.scaled(300, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        pixmap = QPixmap("creo-logo.png")  # Update with your image path
+        logo_label.setPixmap(pixmap.scaled(500, 250, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         logo_label.setAlignment(Qt.AlignCenter)
         logo_layout.addWidget(logo_label)
         logo_container.setLayout(logo_layout)
@@ -515,7 +516,11 @@ class MainApp(QWidget):
         self.stack.setCurrentIndex(0)
         self.username_input.clear()
         self.password_input.clear()
-        QMessageBox.information(self, "Logged Out", "You have been logged out.")
+        response = session.post("https://wehilah806.pythonanywhere.com/logout")
+        if response.status_code == 200:
+            QMessageBox.information(self, "Logged Out", "You have been logged out.")
+        else:
+            QMessageBox.warning(self, "Logout Failed", "Failed to log out. Please try again.")
 
     def submit_student(self):
         data = {
