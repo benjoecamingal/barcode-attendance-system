@@ -17,10 +17,19 @@ API_FILTERS = "https://wehilah806.pythonanywhere.com/filters"
 
 session = requests.Session()
 
+def resource_path(relative_path):
+    """Get absolute path to resource, works for dev and PyInstaller."""
+    if hasattr(sys, '_MEIPASS'):
+        # PyInstaller runtime: files are in temp folder
+        return os.path.join(sys._MEIPASS, relative_path)
+    else:
+        # Normal Python runtime: use current directory
+        return os.path.join(os.path.abspath("."), relative_path)
+
 class MainApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowIcon(QIcon("favicon.ico"))
+        self.setWindowIcon(QIcon(resource_path("favicon.ico")))
         self.setWindowTitle("Creo.log")
         self.resize(800, 600)
         self.center_window()
@@ -76,7 +85,7 @@ class MainApp(QWidget):
         logo_container = QWidget()
         logo_layout = QVBoxLayout()
         logo_label = QLabel()
-        pixmap = QPixmap("creo-logo.png")  # Update with your image path
+        pixmap = QPixmap(resource_path("creo-logo.png"))
         logo_label.setPixmap(pixmap.scaled(500, 250, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         logo_label.setAlignment(Qt.AlignCenter)
         logo_layout.addWidget(logo_label)

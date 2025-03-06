@@ -1,4 +1,5 @@
 import sys
+import os
 import requests
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, 
@@ -8,7 +9,16 @@ from PyQt5.QtGui import QFont, QIcon, QPixmap
 from PyQt5.QtCore import Qt, QTimer, QEvent
 
 # Update API_URL to your PythonAnywhere Flask app URL
-API_URL = "https://zeb234567890.pythonanywhere.com/scan"  # Replace 'zeb234567890' with your PythonAnywhere username
+API_URL = "https://wehilah806.pythonanywhere.com/scan"  # Replace 'zeb234567890' with your PythonAnywhere username
+
+def resource_path(relative_path):
+    """Get absolute path to resource, works for dev and PyInstaller."""
+    if hasattr(sys, '_MEIPASS'):
+        # PyInstaller runtime: files are in temp folder
+        return os.path.join(sys._MEIPASS, relative_path)
+    else:
+        # Normal Python runtime: use current directory
+        return os.path.join(os.path.abspath("."), relative_path)
 
 class BarcodeScanner(QWidget):
     def __init__(self):
